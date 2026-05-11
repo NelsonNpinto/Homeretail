@@ -1,0 +1,18 @@
+# Backend
+attendance-backend/node_modules/
+attendance-backend/.env
+
+# React Native
+AttendanceApp/node_modules/
+AttendanceApp/android/.gradle/
+AttendanceApp/android/app/build/
+AttendanceApp/android/build/
+AttendanceApp/android/local.properties
+AttendanceApp/ios/build/
+AttendanceApp/ios/Pods/
+AttendanceApp/ios/DerivedData/
+AttendanceApp/.expo/
+AttendanceApp/.env
+
+# OS
+.DS_Store
