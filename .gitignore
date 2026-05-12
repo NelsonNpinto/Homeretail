@@ -1,6 +1,6 @@
 # Backend
 attendance-backend/node_modules/
-attendance-backend/.env
+# attendance-backend/.env
 
 # React Native
 AttendanceApp/node_modules/
@@ -12,7 +12,7 @@ AttendanceApp/ios/build/
 AttendanceApp/ios/Pods/
 AttendanceApp/ios/DerivedData/
 AttendanceApp/.expo/
-AttendanceApp/.env
+# AttendanceApp/.env
 
 # OS
 .DS_Store
