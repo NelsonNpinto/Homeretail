@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView,
+  ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
@@ -15,8 +15,11 @@ export default function SignupScreen({ navigation }) {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  const validateEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value);
+
   const handleSignup = async () => {
     if (!name || !email || !password) { Alert.alert('Error', 'Please fill in all fields'); return; }
+    if (!validateEmail(email.trim())) { Alert.alert('Invalid Email', 'Please enter a valid email address (e.g. john@gmail.com)'); return; }
     if (password.length < 6) { Alert.alert('Error', 'Password must be at least 6 characters'); return; }
     setLoading(true);
     try {
@@ -30,6 +33,7 @@ export default function SignupScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="dark-content" backgroundColor={Colors.pageBg} />
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 24, paddingTop: 32 }}>
         <View style={styles.topSection}>

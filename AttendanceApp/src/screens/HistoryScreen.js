@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl, StatusBar, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { attendanceAPI } from '../services/api';
 import { Colors, Shadows } from '../theme';
@@ -13,14 +13,25 @@ const STATUS = {
 export default function HistoryScreen() {
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const insets = useSafeAreaInsets();
 
-  useEffect(() => {
-    attendanceAPI.history()
-      .then(res => setRecords(res.data.records))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+  const fetchRecords = useCallback(async () => {
+    try {
+      const res = await attendanceAPI.history();
+      setRecords(res.data.records);
+    } catch {}
   }, []);
+
+  useEffect(() => {
+    fetchRecords().finally(() => setLoading(false));
+  }, []);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchRecords();
+    setRefreshing(false);
+  }, [fetchRecords]);
 
   const formatTime = (d) => d
     ? new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -41,7 +52,8 @@ export default function HistoryScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={styles.root}>
+      <StatusBar barStyle="dark-content" backgroundColor={Colors.cardBg} />
       <View style={[styles.pageHeader, { paddingTop: insets.top + 16 }]}>
         <Text style={styles.pageTitle}>Attendance History</Text>
         <Text style={styles.pageSubtitle}>Last 30 days</Text>
@@ -56,8 +68,9 @@ export default function HistoryScreen() {
         <FlatList
           data={records}
           keyExtractor={item => item._id}
-          contentContainerStyle={{ padding: 16, paddingTop: 8 }}
+          contentContainerStyle={{ padding: 16, paddingTop: 8, paddingBottom: insets.bottom + 16 }}
           showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.primary]} tintColor={Colors.primary} />}
           renderItem={({ item }) => {
             const s = STATUS[item.status] || STATUS.absent;
             return (
@@ -92,8 +105,9 @@ export default function HistoryScreen() {
   );
 }
 
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.pageBg },
+  root: { flex: 1, backgroundColor: Colors.pageBg },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   pageHeader: {
     paddingHorizontal: 24, paddingBottom: 16,

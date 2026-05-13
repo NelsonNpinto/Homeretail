@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  Alert, ActivityIndicator, ScrollView,
+  Alert, ActivityIndicator, ScrollView, RefreshControl, Platform, StatusBar,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import MapView, { Circle, Marker } from 'react-native-maps';
+import MapView, { Circle, Marker, PROVIDER_GOOGLE, PROVIDER_DEFAULT } from 'react-native-maps';
 import { useAuth } from '../context/AuthContext';
 import { settingsAPI } from '../services/api';
 import { getCurrentPosition, requestLocationPermission } from '../services/geofence';
@@ -23,6 +23,15 @@ export default function SettingsScreen() {
   );
   const [saving, setSaving] = useState(false);
   const [locating, setLocating] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const mapRef = useRef(null);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    setRadius(user?.geofence?.radius || 100);
+    setCenter(user?.geofence?.latitude ? { latitude: user.geofence.latitude, longitude: user.geofence.longitude } : null);
+    setRefreshing(false);
+  }, [user]);
 
   const useCurrentLocation = async () => {
     setLocating(true);
@@ -30,9 +39,17 @@ export default function SettingsScreen() {
       const granted = await requestLocationPermission();
       if (!granted) { Alert.alert('Permission denied', 'Location permission is required'); return; }
       const coords = await getCurrentPosition();
+      const region = {
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        latitudeDelta: 0.003,
+        longitudeDelta: 0.003,
+      };
       setCenter({ latitude: coords.latitude, longitude: coords.longitude });
-    } catch {
-      Alert.alert('Error', 'Could not get current location');
+      mapRef.current?.animateToRegion(region, 800);
+    } catch (err) {
+      console.log('[SETTINGS] location error:', err);
+      Alert.alert('Error', 'Could not get current location. Make sure location is enabled.');
     } finally {
       setLocating(false);
     }
@@ -53,95 +70,121 @@ export default function SettingsScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      <View style={[styles.pageHeader, { paddingTop: insets.top + 16 }]}>
-        <Text style={styles.pageTitle}>Geofence Settings</Text>
-        <Text style={styles.pageSubtitle}>Define your office zone for automatic attendance</Text>
-      </View>
-
-      {/* Map */}
-      <View style={styles.card}>
-        <Text style={styles.sectionLabel}>Office Location</Text>
-        <Text style={styles.sectionHint}>Tap anywhere on the map to place the zone center</Text>
-        <MapView
-          style={styles.map}
-          initialRegion={{
-            latitude: center?.latitude || 37.78825,
-            longitude: center?.longitude || -122.4324,
-            latitudeDelta: 0.01,
-            longitudeDelta: 0.01,
-          }}
-          onPress={e => setCenter(e.nativeEvent.coordinate)}>
-          {center && (
-            <>
-              <Marker coordinate={center} title="Office" pinColor={Colors.error} />
-              <Circle
-                center={center}
-                radius={radius}
-                fillColor="rgba(239,145,33,0.12)"
-                strokeColor={Colors.primary}
-                strokeWidth={2}
-              />
-            </>
-          )}
-        </MapView>
-        <TouchableOpacity style={styles.locBtn} onPress={useCurrentLocation} disabled={locating}>
-          {locating
-            ? <ActivityIndicator color={Colors.primary} size="small" />
-            : <Text style={styles.locBtnText}>Use Current Location</Text>}
-        </TouchableOpacity>
-      </View>
-
-      {/* Radius */}
-      <View style={styles.card}>
-        <Text style={styles.sectionLabel}>Zone Radius</Text>
-        <View style={styles.radiusGrid}>
-          {RADIUS_OPTIONS.map(r => (
-            <TouchableOpacity
-              key={r}
-              style={[styles.chip, radius === r && styles.chipActive]}
-              onPress={() => setRadius(r)}>
-              <Text style={[styles.chipText, radius === r && styles.chipTextActive]}>
-                {r >= 1000 ? `${r / 1000}km` : `${r}m`}
-              </Text>
-            </TouchableOpacity>
-          ))}
+    <View style={styles.root}>
+      <StatusBar barStyle="dark-content" backgroundColor={Colors.cardBg} />
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[Colors.primary]}
+            tintColor={Colors.primary}
+          />
+        }>
+        <View style={[styles.pageHeader, { paddingTop: insets.top + 16 }]}>
+          <Text style={styles.pageTitle}>Geofence Settings</Text>
+          <Text style={styles.pageSubtitle}>Define your office zone for automatic attendance</Text>
         </View>
-        <View style={styles.selectedRow}>
-          <Text style={styles.selectedLabel}>Selected radius</Text>
-          <Text style={styles.selectedValue}>{radius} meters</Text>
-        </View>
-      </View>
 
-      {/* Coordinates */}
-      {center && (
         <View style={styles.card}>
-          <Text style={styles.sectionLabel}>Zone Center Coordinates</Text>
-          <View style={styles.coordRow}>
-            <View style={styles.coordBlock}>
-              <Text style={styles.coordLabel}>Latitude</Text>
-              <Text style={styles.coordValue}>{center.latitude.toFixed(6)}</Text>
-            </View>
-            <View style={styles.coordDivider} />
-            <View style={styles.coordBlock}>
-              <Text style={styles.coordLabel}>Longitude</Text>
-              <Text style={styles.coordValue}>{center.longitude.toFixed(6)}</Text>
-            </View>
+          <Text style={styles.sectionLabel}>Office Location</Text>
+          <Text style={styles.sectionHint}>Tap anywhere on the map to place the zone center</Text>
+          <MapView
+            ref={mapRef}
+            provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT}
+            style={styles.map}
+            showsUserLocation={true}
+            showsMyLocationButton={false}
+            initialRegion={{
+              latitude: center?.latitude || 37.78825,
+              longitude: center?.longitude || -122.4324,
+              latitudeDelta: 0.01,
+              longitudeDelta: 0.01,
+            }}
+            onPress={e => setCenter(e.nativeEvent.coordinate)}>
+            {center && (
+              <>
+                <Marker coordinate={center} title="Office" pinColor={Colors.error} />
+                <Circle
+                  center={center}
+                  radius={radius}
+                  fillColor="rgba(239,145,33,0.12)"
+                  strokeColor={Colors.primary}
+                  strokeWidth={2}
+                />
+              </>
+            )}
+          </MapView>
+          <TouchableOpacity
+            style={styles.locBtn}
+            onPress={useCurrentLocation}
+            disabled={locating}
+            activeOpacity={0.7}>
+            {locating
+              ? <ActivityIndicator color={Colors.primary} size="small" />
+              : <Text style={styles.locBtnText}>Use Current Location</Text>}
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionLabel}>Zone Radius</Text>
+          <View style={styles.radiusGrid}>
+            {RADIUS_OPTIONS.map(r => (
+              <TouchableOpacity
+                key={r}
+                style={[styles.chip, radius === r && styles.chipActive]}
+                onPress={() => setRadius(r)}
+                activeOpacity={0.7}>
+                <Text style={[styles.chipText, radius === r && styles.chipTextActive]}>
+                  {r >= 1000 ? `${r / 1000}km` : `${r}m`}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <View style={styles.selectedRow}>
+            <Text style={styles.selectedLabel}>Selected radius</Text>
+            <Text style={styles.selectedValue}>{radius} meters</Text>
           </View>
         </View>
-      )}
 
-      <TouchableOpacity style={styles.saveBtn} onPress={save} disabled={saving}>
-        {saving
-          ? <ActivityIndicator color={Colors.textWhite} />
-          : <Text style={styles.saveBtnText}>Save Geofence</Text>}
-      </TouchableOpacity>
-    </ScrollView>
+        {center && (
+          <View style={styles.card}>
+            <Text style={styles.sectionLabel}>Zone Center Coordinates</Text>
+            <View style={styles.coordRow}>
+              <View style={styles.coordBlock}>
+                <Text style={styles.coordLabel}>Latitude</Text>
+                <Text style={styles.coordValue}>{center.latitude.toFixed(6)}</Text>
+              </View>
+              <View style={styles.coordDivider} />
+              <View style={styles.coordBlock}>
+                <Text style={styles.coordLabel}>Longitude</Text>
+                <Text style={styles.coordValue}>{center.longitude.toFixed(6)}</Text>
+              </View>
+            </View>
+          </View>
+        )}
+
+        <TouchableOpacity
+          style={styles.saveBtn}
+          onPress={save}
+          disabled={saving}
+          activeOpacity={0.8}>
+          {saving
+            ? <ActivityIndicator color={Colors.textWhite} />
+            : <Text style={styles.saveBtnText}>Save Geofence</Text>}
+        </TouchableOpacity>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.pageBg },
+  root: { flex: 1, backgroundColor: Colors.pageBg },
+  container: { flex: 1 },
   pageHeader: {
     paddingHorizontal: 24, paddingBottom: 16,
     backgroundColor: Colors.cardBg, ...Shadows.cardSmall,
@@ -180,7 +223,7 @@ const styles = StyleSheet.create({
   coordLabel: { fontSize: 11, color: Colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 },
   coordValue: { fontSize: 14, fontWeight: '700', color: Colors.textPrimary },
   saveBtn: {
-    backgroundColor: Colors.primary, marginHorizontal: 16, marginTop: 16, marginBottom: 36,
+    backgroundColor: Colors.primary, marginHorizontal: 16, marginTop: 16,
     borderRadius: 14, padding: 16, alignItems: 'center', ...Shadows.cardSmall,
   },
   saveBtnText: { color: Colors.textWhite, fontWeight: '700', fontSize: 16 },
